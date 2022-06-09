@@ -1,6 +1,7 @@
 import argparse
 import os
 import os.path
+import shutil
 import torchvision
 import torchvision.datasets
 import torchvision.datasets.utils
@@ -32,6 +33,10 @@ DIV2K_DATASET_BRANCHES_URLS = {
     "valid_HR": DIV2K_DATASET_HOME_URL +
     DIV2K_DATASET_BRANCHES_ARCHIVES["valid_HR"]
 }
+
+SET14_DATASET_URL = "https://github.com/jbhuang0604/SelfExSR/archive/refs/heads/master.zip"
+SET14_DATASET_ARCHIVE = "master.zip"
+SET14_DATASET_FOLDER = "SelfExSR-master"
 
 
 def download_and_decompress(
@@ -112,12 +117,13 @@ if __name__ == "__main__":
         "--valid_HR", action="store_true", default=False,
         help="wheter to download the validation set of HR images or not")
 
-    # MORE TO COME HERE! NOW ONLY DIV2K
-
     # set the CLI commands and options for the Set14 dataset
     set14_cli = sub_clis.add_parser(
         "set14", help="wheter to download the Set14 dataset or not")
     set14_cli.set_defaults(dataset="set14")
+    set14_cli.add_argument(
+        "--download_root", action="store", default="../data/",
+        help="the folder where the data are downloaded in")
 
     # parse the CLI and store the commands/options in a sort of dictionary
     args = cli.parse_args()
@@ -153,4 +159,18 @@ if __name__ == "__main__":
                 f"../data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_HR']}",
                 args.download_root)
     elif args.dataset == "set14":
-        pass
+        download_and_decompress(
+            "Set14", "complete",
+            SET14_DATASET_URL,
+            f"../data/{SET14_DATASET_ARCHIVE}",
+            f"../data/{SET14_DATASET_FOLDER}",
+            args.download_root
+        )
+
+        # more adjustments for the Set14 dataset
+        if not os.path.exists("../data/Set14"):
+            os.makedirs("../data/Set14", exist_ok=True)
+            shutil.copytree(
+                f"../data/{SET14_DATASET_FOLDER}/data/Set14/image_SRF_4",
+                "../data/Set14", dirs_exist_ok=True)
+            shutil.rmtree(f"../data/{SET14_DATASET_FOLDER}")
