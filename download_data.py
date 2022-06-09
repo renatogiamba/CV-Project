@@ -134,43 +134,43 @@ if __name__ == "__main__":
             download_and_decompress(
                 "DIV2K", "train_LR",
                 DIV2K_DATASET_BRANCHES_URLS["train_LR"],
-                f"../data/{DIV2K_DATASET_BRANCHES_ARCHIVES['train_LR']}",
-                f"../data/{DIV2K_DATASET_BRANCHES_FOLDERS['train_LR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['train_LR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['train_LR']}",
                 args.download_root)
         if args.train_HR:
             download_and_decompress(
                 "DIV2K", "train_HR",
                 DIV2K_DATASET_BRANCHES_URLS["train_HR"],
-                f"../data/{DIV2K_DATASET_BRANCHES_ARCHIVES['train_HR']}",
-                f"../data/{DIV2K_DATASET_BRANCHES_FOLDERS['train_HR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['train_HR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['train_HR']}",
                 args.download_root)
         if args.valid_LR:
             download_and_decompress(
                 "DIV2K", "valid_LR",
                 DIV2K_DATASET_BRANCHES_URLS["valid_LR"],
-                f"../data/{DIV2K_DATASET_BRANCHES_ARCHIVES['valid_LR']}",
-                f"../data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_LR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['valid_LR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_LR']}",
                 args.download_root)
         if args.valid_HR:
             download_and_decompress(
                 "DIV2K", "valid_HR",
                 DIV2K_DATASET_BRANCHES_URLS["valid_HR"],
-                f"../data/{DIV2K_DATASET_BRANCHES_ARCHIVES['valid_HR']}",
-                f"../data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_HR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['valid_HR']}",
+                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_HR']}",
                 args.download_root)
     elif args.dataset == "set14":
         download_and_decompress(
             "Set14", "complete",
             SET14_DATASET_URL,
-            f"../data/{SET14_DATASET_ARCHIVE}",
-            f"../data/{SET14_DATASET_FOLDER}",
+            f"./data/{SET14_DATASET_ARCHIVE}",
+            f"./data/{SET14_DATASET_FOLDER}",
             args.download_root
         )
 
         # more adjustments for the Set14 dataset
-        if not os.path.exists("../data/Set14"):
-            os.makedirs("../data/Set14", exist_ok=True)
+        if not os.path.exists("./data/Set14"):
+            os.makedirs("./data/Set14", exist_ok=True)
             shutil.copytree(
-                f"../data/{SET14_DATASET_FOLDER}/data/Set14/image_SRF_4",
-                "../data/Set14", dirs_exist_ok=True)
-            shutil.rmtree(f"../data/{SET14_DATASET_FOLDER}")
+                f"./data/{SET14_DATASET_FOLDER}/data/Set14/image_SRF_4",
+                "./data/Set14", dirs_exist_ok=True)
+            shutil.rmtree(f"./data/{SET14_DATASET_FOLDER}")
