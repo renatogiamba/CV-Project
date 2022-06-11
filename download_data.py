@@ -7,38 +7,6 @@ import torchvision.datasets
 import torchvision.datasets.utils
 
 
-DIV2K_DATASET_HOME_URL = "https://data.vision.ee.ethz.ch/cvl/DIV2K/"
-DIV2K_DATASET_BRANCHES_ARCHIVES = {
-    "train_LR": "DIV2K_train_LR_unknown_X4.zip",
-    "train_HR": "DIV2K_train_HR.zip",
-    "valid_LR": "DIV2K_valid_LR_unknown_X4.zip",
-    "valid_HR": "DIV2K_valid_HR.zip"
-}
-DIV2K_DATASET_BRANCHES_FOLDERS = {
-    "train_LR": "DIV2K_train_LR",
-    "train_HR": "DIV2K_train_HR",
-    "valid_LR": "DIV2K_valid_LR",
-    "valid_HR": "DIV2K_valid_HR"
-}
-DIV2K_DATASET_BRANCHES_URLS = {
-    "train_LR": DIV2K_DATASET_HOME_URL +
-    DIV2K_DATASET_BRANCHES_ARCHIVES["train_LR"],
-
-    "train_HR": DIV2K_DATASET_HOME_URL +
-    DIV2K_DATASET_BRANCHES_ARCHIVES["train_HR"],
-
-    "valid_LR": DIV2K_DATASET_HOME_URL +
-    DIV2K_DATASET_BRANCHES_ARCHIVES["valid_LR"],
-
-    "valid_HR": DIV2K_DATASET_HOME_URL +
-    DIV2K_DATASET_BRANCHES_ARCHIVES["valid_HR"]
-}
-
-SET14_DATASET_URL = "https://github.com/jbhuang0604/SelfExSR/archive/refs/heads/master.zip"
-SET14_DATASET_ARCHIVE = "master.zip"
-SET14_DATASET_FOLDER = "SelfExSR-master"
-
-
 def download_and_decompress(
         dataset_name: str, dataset_branch_name: str, dataset_url: str,
         archive_path: str, dataset_path: str, store_root: str) -> None:
@@ -102,7 +70,7 @@ if __name__ == "__main__":
         "div2k", help="wheter to download the DIV2K dataset or not")
     div2k_cli.set_defaults(dataset="div2k")
     div2k_cli.add_argument(
-        "--download_root", action="store", default="../data/",
+        "--download_root", action="store", default="./data/",
         help="the folder where the data are downloaded in")
     div2k_cli.add_argument(
         "--train_LR", action="store_true", default=False,
@@ -122,7 +90,7 @@ if __name__ == "__main__":
         "set14", help="wheter to download the Set14 dataset or not")
     set14_cli.set_defaults(dataset="set14")
     set14_cli.add_argument(
-        "--download_root", action="store", default="../data/",
+        "--download_root", action="store", default="./data/",
         help="the folder where the data are downloaded in")
 
     # parse the CLI and store the commands/options in a sort of dictionary
@@ -133,37 +101,54 @@ if __name__ == "__main__":
         if args.train_LR:
             download_and_decompress(
                 "DIV2K", "train_LR",
-                DIV2K_DATASET_BRANCHES_URLS["train_LR"],
-                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['train_LR']}",
-                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['train_LR']}",
+                "https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_LR_unknown_X4.zip",
+                "./data/DIV2K_train_LR_unknown_X4.zip",
+                "./data/DIV2K_train_LR_unknown",
                 args.download_root)
+
+            # more adjustments for the DIV2K dataset
+            if not os.path.exists("./data/DIV2K_train_LR"):
+                os.makedirs("./data/DIV2K_train_LR", exist_ok=True)
+                shutil.copytree(
+                    "./data/DIV2K_train_LR_unknown/X4",
+                    "./data/DIV2K_train_LR",
+                    dirs_exist_ok=True)
+                shutil.rmtree("./data/DIV2K_train_LR_unknown")
         if args.train_HR:
             download_and_decompress(
                 "DIV2K", "train_HR",
-                DIV2K_DATASET_BRANCHES_URLS["train_HR"],
-                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['train_HR']}",
-                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['train_HR']}",
+                "https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_HR.zip",
+                "./data/DIV2K_train_HR.zip",
+                "./data/DIV2K_train_HR",
                 args.download_root)
         if args.valid_LR:
             download_and_decompress(
                 "DIV2K", "valid_LR",
-                DIV2K_DATASET_BRANCHES_URLS["valid_LR"],
-                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['valid_LR']}",
-                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_LR']}",
+                "https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_LR_unknown_X4.zip",
+                "./data/DIV2K_valid_LR_unknown_X4.zip",
+                "./data/DIV2K_valid_LR_unknown",
                 args.download_root)
+
+            # more adjustments for the DIV2K dataset
+            if not os.path.exists("./data/DIV2K_valid_LR"):
+                shutil.copytree(
+                    "./data/DIV2K_valid_LR_unknown/X4",
+                    "./data/DIV2K_valid_LR",
+                    dirs_exist_ok=True)
+                shutil.rmtree("./data/DIV2K_valid_LR_unknown")
         if args.valid_HR:
             download_and_decompress(
                 "DIV2K", "valid_HR",
-                DIV2K_DATASET_BRANCHES_URLS["valid_HR"],
-                f"./data/{DIV2K_DATASET_BRANCHES_ARCHIVES['valid_HR']}",
-                f"./data/{DIV2K_DATASET_BRANCHES_FOLDERS['valid_HR']}",
+                "https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_HR.zip",
+                "./data/DIV2K_valid_HR.zip",
+                "./data/DIV2K_valid_HR",
                 args.download_root)
     elif args.dataset == "set14":
         download_and_decompress(
             "Set14", "complete",
-            SET14_DATASET_URL,
-            f"./data/{SET14_DATASET_ARCHIVE}",
-            f"./data/{SET14_DATASET_FOLDER}",
+            "https://github.com/jbhuang0604/SelfExSR/archive/refs/heads/master.zip",
+            "./data/master.zip",
+            "./data/SelfExSR-master",
             args.download_root
         )
 
@@ -171,6 +156,7 @@ if __name__ == "__main__":
         if not os.path.exists("./data/Set14"):
             os.makedirs("./data/Set14", exist_ok=True)
             shutil.copytree(
-                f"./data/{SET14_DATASET_FOLDER}/data/Set14/image_SRF_4",
-                "./data/Set14", dirs_exist_ok=True)
-            shutil.rmtree(f"./data/{SET14_DATASET_FOLDER}")
+                "./data/SelfExSR-master/data/Set14/image_SRF_4",
+                "./data/Set14",
+                dirs_exist_ok=True)
+            shutil.rmtree("./data/SelfExSR-master")
