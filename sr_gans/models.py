@@ -26,9 +26,9 @@ class UpscaleBlock(torch.nn.Module):
     """
     def __init__(self,in_features):
         super(UpscaleBlock,self).__init__()
-        self.conv1 = torch.nn.Conv2d(in_features,in_features*4, kernel_size=3, stride=1, padding=1),
-        self.bn1 = torch.nn.BatchNorm2d(in_features*4),
-        self.ps = torch.nn.PixelShuffle(upscale_factor=2),
+        self.conv1 = torch.nn.Conv2d(in_features,in_features*4, kernel_size=3, stride=1, padding=1)
+        self.bn1 = torch.nn.BatchNorm2d(in_features*4)
+        self.ps = torch.nn.PixelShuffle(upscale_factor=2)
         self.relu = torch.nn.PReLU()
 
     def forward(self, x):
