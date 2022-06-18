@@ -40,7 +40,7 @@ class UpscaleBlock(torch.nn.Module):
 
 class Generator(torch.nn.Module):
     """
-    Pytorch class for handling the Generator
+    Pytorch class for handling the Srgan Generator
     """
     def __init__(self, in_channels=3, out_channels=3, n_residual_blocks=16):
         super(Generator, self).__init__()
@@ -126,3 +126,97 @@ class Discriminator(torch.nn.Module):
       out=self.model(x)
       out=self.classifier(out)
       return out
+
+
+class ResidualDenseBlock(torch.nn.Module):
+    """
+    Pytorch subclass for handling the ResidualDenseBlock
+    """
+    def __init__(self,in_features):
+        super(ResidualDenseBlock,self).__init__()
+        self.conv1 = torch.nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1)
+        self.conv2 = torch.nn.Conv2d(2*in_features, in_features, kernel_size=3, stride=1, padding=1)
+        self.conv3 = torch.nn.Conv2d(3*in_features, in_features, kernel_size=3, stride=1, padding=1)
+        self.conv4 = torch.nn.Conv2d(4*in_features, in_features, kernel_size=3, stride=1, padding=1)
+        self.conv5 = torch.nn.Conv2d(5*in_features, in_features, kernel_size=3, stride=1, padding=1)
+        self.lrelu = torch.nn.LeakyReLU()
+
+    
+    def forward(self,x):
+        x1 = self.lrelu(self.conv1(x))
+        x2 = self.lrelu(self.conv2(torch.cat((x,x1),1)))
+        x3 = self.lrelu(self.conv3(torch.cat((x, x1, x2), 1)))
+        x4 = self.lrelu(self.conv4(torch.cat((x, x1, x2, x3), 1)))
+        x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
+        return x5 * 0.2 + x
+
+class ResidualInResidualDenseBlock(torch.nn.Module):
+    """
+    Pytorch subclass for handling the ResidualInResidualDenseBlock part of Esrgan Generator
+    """
+    def __init__(self, filters):
+        super(ResidualInResidualDenseBlock, self).__init__()
+        self.dense_blocks1 = ResidualDenseBlock(filters) 
+        self.dense_blocks2 = ResidualDenseBlock(filters)  
+        self.dense_blocks3 = ResidualDenseBlock(filters)
+
+    def forward(self, x):
+        out = self.dense_blocks1(x)
+        out = self.dense_blocks2(out)
+        out = self.dense_blocks3(out)
+        return out * 0.2 + x
+
+class UpscaleDenseBlock(torch.nn.Module):
+    """
+    Pytorch subclass for handling the upscale part of the Esrgan Generator
+    """
+    def __init__(self,in_features):
+        super(UpscaleDenseBlock,self).__init__()
+        self.conv1 = torch.nn.Conv2d(in_features, in_features * 4, kernel_size=3, stride=1, padding=1)
+        self.lrelu = torch.nn.LeakyReLU()
+        self.ps = torch.nn.PixelShuffle(upscale_factor=2)
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.lrelu(out)
+        out = self.ps(out)
+        return out
+
+class GeneratorRRDB(torch.nn.Module):
+    """
+    Pytorch class for handling the Esrgan Generator
+    """
+    def __init__(self, channels, filters=64, num_res_blocks=16):
+        super(GeneratorRRDB, self).__init__()
+
+        # First layer
+        self.conv1 = torch.nn.Conv2d(channels, filters, kernel_size=3, stride=1, padding=1)
+
+        # Residual blocks
+        self.res_blocks = torch.nn.Sequential(*[ResidualInResidualDenseBlock(filters) for _ in range(num_res_blocks)])
+
+        # Second conv layer post residual blocks
+        self.conv2 = torch.nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1)
+
+        #Upsampling layers
+        upsampling = []
+        for _ in range(2):
+            upsampling.append(UpscaleDenseBlock(filters))
+        self.upsampling = torch.nn.Sequential(*upsampling)
+
+        #Final output block
+        self.conv5 = torch.nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1)
+        self.lrelu = torch.nn.LeakyReLU()
+        self.conv6 = torch.nn.Conv2d(filters, channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        out1 = self.conv1(x)
+        out = self.res_blocks(out1)
+        out2 = self.conv2(out)
+        out = torch.add(out1, out2)
+        out = self.upsampling(out)
+        out = self.conv5(out)
+        out = self.lrelu(out)
+        out = self.conv6(out)
+        return out
+
