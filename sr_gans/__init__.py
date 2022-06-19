@@ -3,3 +3,6 @@ from .datasets import (
     Set14Dataset, 
     DataCollator
 )
+from .srgan_model import (
+    SRGAN
+)
