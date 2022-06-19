@@ -51,7 +51,7 @@ class UpscaleBlock(torch.nn.Module):
 
 class Generator(torch.nn.Module):
     """
-    Pytorch class for handling the Generator
+    Pytorch class for handling the Srgan Generator
     """
 
     def __init__(self, in_channels=3, out_channels=3, n_residual_blocks=16):
