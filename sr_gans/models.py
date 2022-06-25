@@ -38,7 +38,7 @@ class UpscaleBlock(torch.nn.Module):
         out = self.relu(out)
         return out
 
-class Generator(torch.nn.Module):
+class GeneratorRN(torch.nn.Module):
     """
     Pytorch class for handling the Srgan Generator
     """
