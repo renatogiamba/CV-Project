@@ -86,11 +86,11 @@ class DIV2KDataset(torch.utils.data.Dataset):
         # open the images with Pillow, convert them into a Pytorch tensor
         # and apply the image transformations
         lr_img = PIL.Image.open(self.lr_filenames[idx]).convert("RGB")
-        lr_img = self.lr_transforms(lr_img)
         lr_img = torchvision.transforms.functional.to_tensor(lr_img)
+        lr_img = self.lr_transforms(lr_img)
         hr_img = PIL.Image.open(self.hr_filenames[idx]).convert("RGB")
-        hr_img = self.hr_transforms(hr_img)
         hr_img = torchvision.transforms.functional.to_tensor(hr_img)
+        hr_img = self.hr_transforms(hr_img)
 
         return {
             "lr_img": lr_img,
@@ -174,11 +174,11 @@ class Set14Dataset(torch.utils.data.Dataset):
         # open the images with Pillow, convert them into a Pytorch tensor
         # and apply the image transformations
         lr_img = PIL.Image.open(self.lr_filenames[idx]).convert("RGB")
-        lr_img = self.lr_transforms(lr_img)
         lr_img = torchvision.transforms.functional.to_tensor(lr_img)
+        lr_img = self.lr_transforms(lr_img)
         hr_img = PIL.Image.open(self.hr_filenames[idx]).convert("RGB")
-        hr_img = self.hr_transforms(hr_img)
         hr_img = torchvision.transforms.functional.to_tensor(hr_img)
+        hr_img = self.hr_transforms(hr_img)
 
         return {
             "lr_img": lr_img,

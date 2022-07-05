@@ -43,7 +43,7 @@ class GeneratorRN(torch.nn.Module):
     Pytorch class for handling the Srgan Generator
     """
     def __init__(self, in_channels=3, out_channels=3, n_residual_blocks=16):
-        super(Generator, self).__init__()
+        super(GeneratorRN, self).__init__()
         
         #First conv layer
         self.conv1 = torch.nn.Conv2d(in_channels,64,kernel_size=9,stride=1,padding=4)

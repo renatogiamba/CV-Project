@@ -1,5 +1,6 @@
 import torch
-import torch.nn as nn
+import torch.nn
+import torch.nn.functional
 import os
 import config
 import numpy as np
@@ -12,7 +13,7 @@ from torchvision.models import vgg19
 def denormalize(tensors):
     """ Denormalizes image tensors using mean and std """
     for c in range(3):
-      tensors[:, c].mul_(config.std[c]).add_(config.mean[c])
+        tensors[:, c].mul_(config.std[c]).add_(config.mean[c])
     return torch.clamp(tensors, 0, 255)
 
 
@@ -22,7 +23,8 @@ def save_checkpoint(model, optimizer, filename="my_checkpoint.pth.tar"):
         "state_dict": model.state_dict(),
         "optimizer": optimizer.state_dict(),
     }
-    torch.save(checkpoint, "/content/drive/MyDrive/CV_Project/saved_models/"+filename)
+    torch.save(
+        checkpoint, "/content/drive/MyDrive/CV_Project/saved_models/"+filename)
 
 
 def load_checkpoint(checkpoint_file, model, optimizer, lr):
@@ -52,11 +54,29 @@ def plot_examples(low_res_folder, gen):
         save_image(denormalize(upscaled_img), f"saved/{file}")
     gen.train()
 
-class VGGLoss(nn.Module):
+
+class VGGLoss(torch.nn.Module):
     def __init__(self):
         super(VGGLoss, self).__init__()
         vgg19_model = vgg19(pretrained=True)
-        self.vgg_loss = nn.Sequential(*list(vgg19_model.features.children())[:18])
+        self.vgg_loss = torch.nn.Sequential(
+            *list(vgg19_model.features.children())[:18])
 
     def forward(self, img):
         return self.vgg_loss(img)
+
+
+def pixel_loss_fn(
+        gen_imgs: torch.Tensor, target_imgs: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.l1_loss(gen_imgs, target_imgs)
+
+
+def content_loss_fn(
+        gen_features: torch.Tensor, target_features: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.l1_loss(gen_features, target_features)
+
+
+def adversarial_loss_fn(
+        gen_validities: torch.Tensor, target_validities: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.binary_cross_entropy_with_logits(
+        gen_validities, target_validities)
