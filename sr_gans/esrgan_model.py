@@ -1,5 +1,6 @@
 import collections
 import torch
+import torch.jit
 import torch.nn
 import torch.optim
 import torch.utils
@@ -10,6 +11,9 @@ import torchvision
 import torchvision.models
 from typing import *
 
+from .base_model import (
+    BaseSRGAN
+)
 from .utils import (
     adversarial_loss_fn, content_loss_fn, pixel_loss_fn
 )
@@ -184,49 +188,22 @@ class FeatureExtractor(torch.nn.Module):
         return features
 
 
-class ESRGAN(torch.nn.Module):
+class ESRGAN(BaseSRGAN):
     def __init__(
-            self, in_channels: int, out_channels: int,
+            self, device: torch.device, in_channels: int, out_channels: int,
             img_size: int, res_scale: float,
             gen_optimizer_init: Callable,
             gen_optimizer_args: Dict[str, Any],
             disc_optimizer_init: Callable,
             disc_optimizer_args: Dict[str, Any]) -> None:
-        super(ESRGAN, self).__init__()
-        self.gen_model = Generator(in_channels, out_channels, res_scale)
-        self.disc_model = Discriminator(in_channels, img_size)
-        self.feature_model = torch.jit.load(
-            "./models/esrgan_feature_extractor_jit.pt")
-        self.gen_optimizer: torch.optim.Optimizer = gen_optimizer_init(
-            self.gen_model.parameters(),
-            lr=gen_optimizer_args["lr"],
-            betas=gen_optimizer_args["betas"])
-        self.disc_optimizer: torch.optim.Optimizer = disc_optimizer_init(
-            self.disc_model.parameters(),
-            lr=disc_optimizer_args["lr"],
-            betas=disc_optimizer_args["betas"])
-
-    def save_checkpoint(self, filename: str) -> None:
-        ckpt = {
-            "gen_model": self.gen_model.state_dict(),
-            "disc_model": self.disc_model.state_dict(),
-            "gen_optimizer": self.gen_optimizer.state_dict(),
-            "disc_optimizer": self.disc_optimizer.state_dict()
-        }
-        torch.save(ckpt, f"./models/{filename}")
-
-    def load_checkpoint(self, filename: str) -> None:
-        ckpt = torch.load(f"./models/{filename}")
-        self.gen_model.load_state_dict(ckpt["gen_model"])
-        self.disc_model.load_state_dict(ckpt["disc_model"])
-        self.gen_optimizer.load_state_dict(ckpt["gen_optimizer"])
-        self.disc_optimizer.load_state_dict(ckpt["disc_optimizer"])
-
-        # LRs for optimizers?
-
-    def forward(self, lr_imgs: torch.Tensor) -> torch.Tensor:
-        hr_imgs = self.gen_model(lr_imgs)
-        return hr_imgs
+        super(ESRGAN, self).__init__(
+            device,
+            Generator(in_channels, out_channels, res_scale),
+            Discriminator(in_channels, img_size),
+            torch.jit.load(
+                "./models/esrgan_feature_extractor_jit.pt", map_location=device),
+            gen_optimizer_init, gen_optimizer_args,
+            disc_optimizer_init, disc_optimizer_args)
 
     def train_generator_start(
             self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -262,6 +239,18 @@ class ESRGAN(torch.nn.Module):
             "pred_fakes": pred_fakes
         }
     
+    @torch.no_grad()
+    def validation_start(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        lr_imgs = inputs["lr_imgs"]
+        hr_imgs = inputs["hr_imgs"]
+
+        gen_hr_imgs = self.gen_model(lr_imgs)
+        return {
+            **inputs,
+            "gen_hr_imgs": gen_hr_imgs
+        }
+
 
     def train_generator_step(
             self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -302,108 +291,15 @@ class ESRGAN(torch.nn.Module):
             "adversarial_real_loss": adversarial_real_loss,
             "adversarial_fake_loss": adversarial_fake_loss
         }
+    
+    @torch.no_grad()
+    def validation_step(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        hr_imgs = inputs["hr_imgs"]
+        gen_hr_imgs = inputs["gen_hr_imgs"]
 
-    def fit(
-            self,
-            train_dl: torch.utils.data.DataLoader,
-            val_dl: torch.utils.data.DataLoader,
-            num_epochs: int, patience: int) -> None:
-        num_batches = len(train_dl)
-        remaining_patience = patience
-        last_psnr = torch.inf
-        last_ssim = -torch.inf
-        for epoch in range(num_epochs):
-            if remaining_patience == 0:
-                break
-
-            self.train()
-            for i, batch in enumerate(train_dl):
-                lr_imgs = batch["lr_imgs"]
-                hr_imgs = batch["hr_imgs"]
-                reals = torch.ones((lr_imgs.shape[0], 1), dtype=torch.float)
-                fakes = torch.zeros((hr_imgs.shape[0], 1), dtype=torch.float)
-
-                self.gen_optimizer.zero_grad()
-
-                gen_inputs = self.train_generator_start({
-                    "lr_imgs": lr_imgs,
-                    "hr_imgs": hr_imgs,
-                    "reals": reals,
-                    "fakes": fakes
-                })
-
-                gen_losses = self.train_generator_step(gen_inputs)
-                gen_loss = gen_losses["loss"]
-                gen_loss.backward()
-                self.gen_optimizer.step()
-
-                self.disc_optimizer.zero_grad()
-
-                disc_inputs = self.train_discriminator_start({
-                    "hr_imgs": hr_imgs,
-                    "gen_hr_imgs": gen_inputs["gen_hr_imgs"].detach(),
-                    "reals": reals,
-                    "fakes": fakes
-                })
-
-                disc_losses = self.train_discriminator_step(disc_inputs)
-                disc_loss = disc_losses["loss"]
-                disc_loss.backward()
-                self.disc_optimizer.step()
-                print(
-                    f"Train [Epoch {epoch + 1:3d}/{num_epochs:3d}] "
-                    f"[Batch {i + 1:3d}/{num_batches:3d}]\n"
-                    f"[Gen Loss {gen_loss.item():.2f} => "
-                    f"Pixel Loss {gen_losses['pixel_loss'].item():.2f}, "
-                    f"Content Loss {gen_losses['content_loss'].item():.2f}, "
-                    f"Adversarial Loss {gen_losses['adversarial_loss'].item():.2f}]\n"
-                    f"[Disc Loss {disc_loss.item():.2f} => "
-                    f"Adversarial Real Loss {disc_losses['adversarial_real_loss'].item():.2f}, "
-                    f"Adversarial Fake Loss {disc_losses['adversarial_fake_loss'].item():.2f}]\n")
-
-            self.eval()
-            psnrs = list()
-            ssims = list()
-            for i, batch in enumerate(val_dl):
-                lr_imgs = batch["lr_imgs"]
-                hr_imgs = batch["hr_imgs"]
-
-                with torch.no_grad():
-                    gen_hr_imgs = self.gen_model(lr_imgs)
-
-                psnr = torchmetrics.functional.peak_signal_noise_ratio(
-                    gen_hr_imgs, hr_imgs)
-                psnrs.append(psnr)
-                ssim = torchmetrics.functional.structural_similarity_index_measure(
-                    gen_hr_imgs, hr_imgs)
-                ssims.append(ssim)
-
-                print(
-                    f"Validation [Epoch {epoch + 1:3d}/{num_epochs:3d}] "
-                    f"[Batch {i + 1:3d}/{num_batches:3d}]\n"
-                    f"[Peak Signal Noise Ratio {psnr.item():.2f}]\n"
-                    f"[Structural Similarity Index Measure {ssim.item():.2f}]\n")
-            
-            psnrs = torch.tensor(psnrs, dtype=torch.float)
-            ssims = torch.tensor(ssims, dtype=torch.float)
-            psnr = torch.mean(psnrs).item()
-            ssim = torch.mean(ssims).item()
-            if psnr < last_psnr and ssim > last_psnr:
-                last_psnr = psnr
-                last_psnr = ssim
-                if remaining_patience < patience:
-                    remaining_patience += 1
-                print("[Saving best checkpoint for the model...]\n")
-                self.save_checkpoint("./models/esrgan.ckpt")
-            elif psnr < last_psnr:
-                last_psnr = psnr
-                print("[Relaxed Patience!]\n")
-            elif ssim > last_ssim:
-                last_ssim = ssim
-                print("[Relaxed Patience!]\n")
-            else:
-                if remaining_patience > 0:
-                    remaining_patience -= 1
-                print("[PATIENCE!]\n")
-            print(f"[Remaining Patience {remaining_patience}]\n")
-
+        ssim = torchmetrics.functional.structural_similarity_index_measure(
+            gen_hr_imgs, hr_imgs)
+        return {
+            "ssim": ssim
+        }

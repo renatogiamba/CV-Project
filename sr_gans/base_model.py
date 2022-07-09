@@ -1,4 +1,5 @@
 import torch
+import torch.jit
 import torch.nn
 import torch.nn.functional
 import torch.optim
@@ -7,97 +8,377 @@ import torch.utils.data
 from typing import *
 
 
-def adversarial_loss_fn(
-        predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.mse_loss(predictions, targets)
-
-
-def content_loss_fn(
-        predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.l1_loss(predictions, targets)
-
-
 class BaseSRGAN(torch.nn.Module):
     """
-    Pytorch subclass for handling the base functionalities of the SRGAN models. It is
-    a sort of interface that the final models HAVE TO implement.
+    Pytorch subclass for handling the base functionalities of the SRGAN models.
+    It is a sort of interface that the final models HAVE TO implement.
     """
 
     def __init__(
-            self, gen: torch.nn.Module, disc: torch.nn.Module) -> None:
+            self, device: torch.device,
+            gen_model: torch.nn.Module, disc_model: torch.nn.Module,
+            feature_model: Union[torch.nn.Module, torch.jit.ScriptModule],
+            gen_optimizer_init: Callable,
+            gen_optimizer_args: Dict[str, Any],
+            disc_optimizer_init: Callable,
+            disc_optimizer_args: Dict[str, Any]) -> None:
         """
         Constructor for the class.
 
         Parameters:
         ===========
-        gen (torch.nn.Module): The Pytorch generator model for this GAN.
+        device (torch.device): The Pytorch device to put tensors on.
 
-        disc (torch.nn.Module): The Pytorch discriminator model for this GAN.
+        gen_model (torch.nn.Module): The Pytorch generator model for this GAN.
+
+        disc_model (torch.nn.Module): The Pytorch discriminator model for this GAN.
+
+        feature_model (Union[torch.nn.Module, torch.jit.ScriptModule]): The Pytorch 
+            model for extracting features from images for this GAN.
+
+        gen_optimizer_init: (Callable): Constructor for creating the Pytorch optimizer 
+            for the generator model.
+
+        gen_optimizer_args: (Dict[str, Any]): Input arguments for the constructor of 
+            the optimizer for the generator model.
+
+        disc_optimizer_init: (Callable): Constructor for creating the Pytorch optimizer 
+            for the discriminator model.
+
+        disc_optimizer_args: (Dict[str, Any]): Input arguments for the constructor of 
+            the optimizer for the discriminator model.
         """
 
         super(BaseSRGAN, self).__init__()
 
-        # store the generator and the discriminator models
-        self.gen = gen
-        self.disc = disc
+        # store the device and the models
+        self.device = device
+        self.gen_model = gen_model
+        self.disc_model = disc_model
+        self.feature_model = feature_model
 
-    def fit_generator_step(
-            self, lr_imgs: torch.Tensor, hr_imgs: torch.Tensor,
-            reals: torch.Tensor, fakes: torch.Tensor,
-            gen_optimizer: torch.optim.Optimizer) -> Dict[str, torch.Tensor]:
+        # build the optimizers
+        self.gen_optimizer: torch.optim.Optimizer = gen_optimizer_init(
+            self.gen_model.parameters(), **gen_optimizer_args)
+        self.disc_optimizer: torch.optim.Optimizer = disc_optimizer_init(
+            self.disc_model.parameters(), **disc_optimizer_args)
+
+    def forward(self, lr_imgs: torch.Tensor) -> torch.Tensor:
         """
-        Perform a step in the generator training process on a single batch.
+        Perform the feedforward pass of the GAN, i.e. generate high resolution 
+        images from low resolution ones.
+        Feel free to override this method in subclasses if you want a different 
+        behaviour.
 
-        This function HAS TO be overriden by the subclasses that implement this
-        interface.
-
-        TODO: Update this docs and method.
-        """
-
-        raise NotImplementedError(
-            "You HAVE TO implement the fit_generator_step() method.")
-
-    def fit_discriminator_step(
-            self, lr_imgs: torch.Tensor, hr_imgs: torch.Tensor,
-            reals: torch.Tensor, fakes: torch.Tensor,
-            gen_optimizer: torch.optim.Optimizer) -> Dict[str, torch.Tensor]:
-        """
-        Perform a step in the discriminator training process on a single batch.
-
-        This function HAS TO be overriden by the subclasses that implement this
-        interface.
-
-        TODO: Update this docs and method.
+        Parameters:
+        ===========
+        lr_imgs (torch.Tensor): A batch of input low resolution images.
         """
 
-        raise NotImplementedError(
-            "You HAVE TO implement the fit_discriminator_step() method.")
+        hr_imgs = self.gen_model(lr_imgs)
+        return hr_imgs
 
-    # NOT COMPLETED YET!!
+    def save_checkpoint(self, filename: str) -> None:
+        """
+        Save the models and the optimizers state for restarting the training later or 
+        for simply having the trained model state.
+
+        Parameters:
+        ===========
+        filename (str): Name of the file to save the state on. It must be relative to 
+            the 'models/' folder.
+        """
+
+        # read the state
+        ckpt = {
+            "gen_model": self.gen_model.state_dict(),
+            "disc_model": self.disc_model.state_dict(),
+            "gen_optimizer": self.gen_optimizer.state_dict(),
+            "disc_optimizer": self.disc_optimizer.state_dict()
+        }
+
+        # save the state
+        torch.save(ckpt, f"./models/{filename}")
+
+    def load_checkpoint(self, filename: str) -> None:
+        """
+        Load the models and the optimizers state for restarting the training later or 
+        for simply having the trained model state.
+
+        Parameters:
+        ===========
+        filename (str): Name of the file to load the state from. It must be relative to 
+            the 'models/' folder and it must have been generated by the method 
+            'save_checkpoint()'.
+        """
+
+        # load the state
+        ckpt = torch.load(f"./models/{filename}", map_location=self.device)
+
+        # write the state
+        self.gen_model.load_state_dict(ckpt["gen_model"])
+        self.disc_model.load_state_dict(ckpt["disc_model"])
+        self.gen_optimizer.load_state_dict(ckpt["gen_optimizer"])
+        self.disc_optimizer.load_state_dict(ckpt["disc_optimizer"])
+
+        # LRs for optimizers?
+
+    def train_generator_start(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the other needed inputs for the training procedure of the generator 
+        model from a single input batch.
+        You HAVE TO override this method if you need more inputs than the input batch.
+
+        Parameters:
+        ===========
+        inputs (Dict[str, torch.Tensor]): The input batch.
+
+        Returns:
+        ========
+        (Dict[str, torch.Tensor]): The updated inputs.
+        """
+
+        return {
+            **inputs
+        }
+
+    def train_discriminator_start(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the other needed inputs for the training procedure of the discriminator 
+        model from a single input batch.
+        You HAVE TO override this method if you need more inputs than the input batch.
+
+        Parameters:
+        ===========
+        inputs (Dict[str, torch.Tensor]): The input batch.
+
+        Returns:
+        ========
+        (Dict[str, torch.Tensor]): The updated inputs.
+        """
+
+        return {
+            **inputs
+        }
+    
+    @torch.no_grad()
+    def validation_start(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the other needed inputs for the validation procedure of the GAN 
+        model from a single input batch.
+        You HAVE TO override this method if you need more inputs than the input batch.
+
+        Parameters:
+        ===========
+        inputs (Dict[str, torch.Tensor]): The input batch.
+
+        Returns:
+        ========
+        (Dict[str, torch.Tensor]): The updated inputs.
+        """
+
+        return {
+            **inputs
+        }
+
+    def train_generator_step(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the losses on a single batch for the generator model during the 
+        training procedure.
+        You HAVE TO override this method if you want to the training procedure to be
+        effective.
+
+        Parameters:
+        ===========
+        inputs (Dict[str, torch.Tensor]): The updated input batch generated by the 
+            'train_generator_start()' method.
+
+        Returns:
+        ========
+        (Dict[str, torch.Tensor]): The computed losses stored in a Python dictionary.
+            The dictionary must have the 'loss' key, because it has the loss that 
+            will be used in the backpropagation pass as value.
+        """
+
+        return {
+            "loss": torch.tensor(
+                0., dtype=torch.float, device=self.device, requires_grad=True)
+        }
+
+    def train_discriminator_step(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the losses on a single batch for the discriminator model during the 
+        training procedure.
+        You HAVE TO override this method if you want to the training procedure to be
+        effective.
+
+        Parameters:
+        ===========
+        inputs (Dict[str, torch.Tensor]): The updated input batch generated by the 
+            'train_discriminator_start()' method.
+
+        Returns:
+        ========
+        (Dict[str, torch.Tensor]): The computed losses stored in a Python dictionary.
+            The dictionary must have the 'loss' key, because it has the loss that 
+            will be used in the backpropagation pass as value.
+        """
+
+        return {
+            "loss": torch.tensor(
+                0., dtype=torch.float, device=self.device, requires_grad=True)
+        }
+
+    @torch.no_grad()
+    def validation_step(
+            self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the metrics on a single batch for GAN model during the 
+        validation procedure.
+        You HAVE TO override this method if you want to the validation procedure to be
+        effective.
+
+        Parameters:
+        ===========
+        inputs (Dict[str, torch.Tensor]): The updated input batch generated by the 
+            'validation_start()' method.
+
+        Returns:
+        ========
+        (Dict[str, torch.Tensor]): The computed metrics stored in a Python dictionary.
+        """
+
+        return {
+            "metric": torch.tensor(0., dtype=torch.float, device=self.device)
+        }
+
     def fit(
             self,
             train_dl: torch.utils.data.DataLoader,
-            #valid_dl: torch.utils.data.DataLoader,
-            num_epochs: int,
-            gen_optimizer: torch.optim.Optimizer,
-            disc_optimizer: torch.optim.Optimizer) -> None:
+            val_dl: torch.utils.data.DataLoader,
+            num_epochs: int, patience: int,
+            checkpoint_filename: Optional[str] = None) -> None:
+
+        # if requested, load a checkpoint
+        if checkpoint_filename is not None:
+            print("[Loading the best checkpoint...]")
+            self.load_checkpoint(checkpoint_filename)
+            print("[Best checkpoint loaded.]\n")
+
+        # prepare remaining patience for early stopping
+        remaining_patience = patience
+
+        # prepare auxiliary variables
+        num_train_batches = len(train_dl)
+        num_val_batches = len(val_dl)
+
         for epoch in range(num_epochs):
-            for batch in train_dl:
+
+            # check for early stopping
+            if remaining_patience == 0:
+                break
+
+            # TRAINING PROCEDURE
+
+            # set models in training mode
+            self.gen_model.train()
+            self.disc_model.train()
+
+            # iterate over the training dataset
+            for i, batch in enumerate(train_dl):
                 lr_imgs = batch["lr_imgs"]
                 hr_imgs = batch["hr_imgs"]
-                batch_size = lr_imgs.shape[0]
-                out_shape = self.disc.out_shape
-
                 reals = torch.ones(
-                    (batch_size, *out_shape), dtype=torch.float)
+                    (lr_imgs.shape[0], 1), dtype=torch.float, device=self.device)
                 fakes = torch.zeros(
-                    (batch_size, *out_shape), dtype=torch.float)
+                    (lr_imgs.shape[0], 1), dtype=torch.float, device=self.device)
 
-                gen_step_outs = self.fit_generator_step(
-                    lr_imgs, hr_imgs, reals, fakes, gen_optimizer)
-                disc_step_outs = self.fit_discriminator_step(
-                    lr_imgs, hr_imgs, reals, fakes, disc_optimizer)
+                # reset the optimizer of the generator model
+                self.gen_optimizer.zero_grad()
 
-    def forward(self, lr_imgs: torch.Tensor) -> torch.Tensor:
-        hr_imgs = self.gen(lr_imgs)
-        return hr_imgs
+                # compute the needed inputs for the generator model
+                gen_inputs = self.train_generator_start({
+                    "lr_imgs": lr_imgs,
+                    "hr_imgs": hr_imgs,
+                    "reals": reals,
+                    "fakes": fakes
+                })
+
+                # compute the losses for the generator model
+                gen_losses = self.train_generator_step(gen_inputs)
+
+                # perform the backpropagation pass of the generator model
+                gen_loss = gen_losses["loss"]
+                gen_loss.backward()
+
+                # update the weigths of the generator model
+                self.gen_optimizer.step()
+
+                # reset the optimizer of the discriminator model
+                self.disc_optimizer.zero_grad()
+
+                # compute the needed inputs for the discriminator model
+                disc_inputs = self.train_discriminator_start({
+                    "lr_imgs": lr_imgs,
+                    "hr_imgs": hr_imgs,
+                    "reals": reals,
+                    "fakes": fakes,
+                    "gen_hr_imgs": gen_inputs["gen_hr_imgs"].detach()
+                })
+
+                # compute the losses for the discriminator model
+                disc_losses = self.train_discriminator_step(disc_inputs)
+
+                # perform the backpropagation pass of the discriminator model
+                disc_loss = disc_losses["loss"]
+                disc_loss.backward()
+
+                # update the weigths of the discriminator model
+                self.disc_optimizer.step()
+
+                # log results
+                print(
+                    f"Train [epoch {epoch + 1:3d}/{num_epochs:3d}] "
+                    f"[batch {i + 1:3d}/{num_train_batches:3d}]")
+                print("Generator ", end="")
+                for loss_name, loss in gen_losses.items():
+                    print(f"[{loss_name} {loss.item():.2f}] ", end="")
+                print()
+                print("Discriminator ", end="")
+                for loss_name, loss in disc_losses.items():
+                    print(f"[{loss_name} {loss.item():.2f}] ", end="")
+                print("\n")
+            
+            # VALIDATION PROCEDURE
+
+            # set models in validation mode
+            self.gen_model.eval()
+            self.disc_model.eval()
+
+            # iterate over the validation dataset
+            for i, batch in enumerate(val_dl):
+                lr_imgs = batch["lr_imgs"]
+                hr_imgs = batch["hr_imgs"]
+
+                # compute the needed inputs for the GAN model
+                gan_inputs = self.validation_start({
+                    "lr_imgs": lr_imgs,
+                    "hr_imgs": hr_imgs
+                })
+
+                # compute the metrics for the GAN model
+                gan_metrics = self.validation_step(gan_inputs)
+
+                # log results
+                print(
+                    f"Validation [epoch {epoch + 1:3d}/{num_epochs:3d}] "
+                    f"[batch {i + 1:3d}/{num_val_batches:3d}]")
+                print("GAN ", end="")
+                for metric_name, metric in gan_metrics.items():
+                    print(f"[{metric_name} {metric.item():.2f}] ", end="")
+                print("\n")

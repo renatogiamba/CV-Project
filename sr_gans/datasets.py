@@ -15,7 +15,7 @@ class DIV2KDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-            self, train: bool,
+            self, train: bool, device: torch.device,
             lr_transforms: torch.nn.Sequential,
             hr_transforms: torch.nn.Sequential) -> None:
         """
@@ -26,6 +26,8 @@ class DIV2KDataset(torch.utils.data.Dataset):
         train (bool): Flag to choose wheter to open the training set (if True) or the 
             validation set (if False).
 
+        device (torch.device): The Pytorch device to put data tensors on.
+
         lr_transforms (torch.nn.Sequential): A Pytorch module containing a sequence of 
             image transformation that will be applied to the LR images.
 
@@ -35,7 +37,8 @@ class DIV2KDataset(torch.utils.data.Dataset):
 
         super(DIV2KDataset, self).__init__()
 
-        # store the image transformations
+        # store the device and the image transformations
+        self.device = device
         self.lr_transforms = lr_transforms
         self.hr_transforms = hr_transforms
 
@@ -87,9 +90,11 @@ class DIV2KDataset(torch.utils.data.Dataset):
         # and apply the image transformations
         lr_img = PIL.Image.open(self.lr_filenames[idx]).convert("RGB")
         lr_img = torchvision.transforms.functional.to_tensor(lr_img)
+        lr_img = lr_img.to(device=self.device)
         lr_img = self.lr_transforms(lr_img)
         hr_img = PIL.Image.open(self.hr_filenames[idx]).convert("RGB")
         hr_img = torchvision.transforms.functional.to_tensor(hr_img)
+        hr_img = hr_img.to(device=self.device)
         hr_img = self.hr_transforms(hr_img)
 
         return {
@@ -104,7 +109,7 @@ class Set14Dataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-            self,
+            self, device: torch.device,
             lr_transforms: torch.nn.Sequential,
             hr_transforms: torch.nn.Sequential) -> None:
         """
@@ -112,6 +117,8 @@ class Set14Dataset(torch.utils.data.Dataset):
 
         Parameters:
         ===========
+        device (torch.device): The Pytorch device to put data tensors on.
+
         lr_transforms (torch.nn.Sequential): A Pytorch module containing a sequence of 
             image transformation that will be applied to the LR images.
 
@@ -121,7 +128,8 @@ class Set14Dataset(torch.utils.data.Dataset):
 
         super(Set14Dataset, self).__init__()
 
-        # store the image transformations
+        # store the device and the image transformations
+        self.device = device
         self.lr_transforms = lr_transforms
         self.hr_transforms = hr_transforms
 
@@ -175,9 +183,11 @@ class Set14Dataset(torch.utils.data.Dataset):
         # and apply the image transformations
         lr_img = PIL.Image.open(self.lr_filenames[idx]).convert("RGB")
         lr_img = torchvision.transforms.functional.to_tensor(lr_img)
+        lr_img = lr_img.to(device=self.device)
         lr_img = self.lr_transforms(lr_img)
         hr_img = PIL.Image.open(self.hr_filenames[idx]).convert("RGB")
         hr_img = torchvision.transforms.functional.to_tensor(hr_img)
+        hr_img = hr_img.to(device=self.device)
         hr_img = self.hr_transforms(hr_img)
 
         return {
