@@ -21,7 +21,8 @@ class BaseSRGAN(torch.nn.Module):
             gen_optimizer_init: Callable,
             gen_optimizer_args: Dict[str, Any],
             disc_optimizer_init: Callable,
-            disc_optimizer_args: Dict[str, Any]) -> None:
+            disc_optimizer_args: Dict[str, Any],
+            patience_metrics: Dict[str, float]) -> None:
         """
         Constructor for the class.
 
@@ -62,6 +63,9 @@ class BaseSRGAN(torch.nn.Module):
             self.gen_model.parameters(), **gen_optimizer_args)
         self.disc_optimizer: torch.optim.Optimizer = disc_optimizer_init(
             self.disc_model.parameters(), **disc_optimizer_args)
+        
+        # store the initial patience metrics
+        self.last_patience_metrics = patience_metrics
 
     def forward(self, lr_imgs: torch.Tensor) -> torch.Tensor:
         """
@@ -256,6 +260,30 @@ class BaseSRGAN(torch.nn.Module):
         return {
             "metric": torch.tensor(0., dtype=torch.float, device=self.device)
         }
+    
+    def patience_step(self, metrics: Dict[str, float]) -> int:
+        """
+        Update the patience metrics and compute a patience score.
+        The patience score HAS TO respect these constrains:
+        - it HAS TO be positive if the model got better,
+        - it HAS TO be negative if the models got worse,
+        - it HAS TO be zero if the model is more or less the same as in the previous 
+        batch.
+
+        You HAVE TO override this method if you want to the early stopping procedure to 
+        be effective.
+
+        Parameters:
+        ===========
+        metrics (Dict[str, float]): The aggregated patience metrics generated during 
+            the validation procedure.
+
+        Returns:
+        ========
+        (int): The computed patience score.
+        """
+        
+        return 0
 
     def fit(
             self,
@@ -281,6 +309,7 @@ class BaseSRGAN(torch.nn.Module):
 
             # check for early stopping
             if remaining_patience == 0:
+                print("[Early stopping.]\n")
                 break
 
             # TRAINING PROCEDURE
@@ -356,6 +385,9 @@ class BaseSRGAN(torch.nn.Module):
             
             # VALIDATION PROCEDURE
 
+            # prepare check variables for patience
+            patience_metrics: Dict[str, List[float]] = dict()
+            
             # set models in validation mode
             self.gen_model.eval()
             self.disc_model.eval()
@@ -374,6 +406,13 @@ class BaseSRGAN(torch.nn.Module):
                 # compute the metrics for the GAN model
                 gan_metrics = self.validation_step(gan_inputs)
 
+                # store metrics for patience
+                for metric_name, metric in gan_metrics.items():
+                    if metric_name in patience_metrics:
+                        patience_metrics[metric_name].append(metric.item())
+                    else:
+                        patience_metrics[metric_name] = [metric.item()]
+
                 # log results
                 print(
                     f"Validation [epoch {epoch + 1:3d}/{num_epochs:3d}] "
@@ -382,3 +421,35 @@ class BaseSRGAN(torch.nn.Module):
                 for metric_name, metric in gan_metrics.items():
                     print(f"[{metric_name} {metric.item():.2f}] ", end="")
                 print("\n")
+            
+            # PATIENCE FOR EARLY STOPPING
+            
+            # aggregate metrics for patience
+            for metric_name in patience_metrics.keys():
+                patience_metrics[metric_name] = torch.mean(torch.tensor(
+                    patience_metrics[metric_name])).item()
+            
+            # log results
+            print(
+                f"Validation [epoch {epoch + 1:3d}/{num_epochs:3d}]")
+            print("GAN (aggregated)", end="")
+            for metric_name, metric in patience_metrics.items():
+                print(f"[{metric_name} {metric.item():.2f}] ", end="")
+            print("\n")
+            
+            # update for patience and compute patience score
+            score = self.patience_step(patience_metrics)
+
+            if score > 0:
+                print("[Saving the best checkpoint...]")
+                self.save_checkpoint(checkpoint_filename)
+                print("[Best checkpoint saved.]")
+                if remaining_patience > 0:
+                    remaining_patience -= 1
+            elif score < 0:
+                print("[PATIENCE!]")
+                if remaining_patience < patience:
+                    remaining_patience += 1
+            else:
+                print("[Relaxed patience.]")
+            print(f"[Remaining patience {remaining_patience:2d}]\n")

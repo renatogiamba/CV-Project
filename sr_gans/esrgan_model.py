@@ -195,7 +195,8 @@ class ESRGAN(BaseSRGAN):
             gen_optimizer_init: Callable,
             gen_optimizer_args: Dict[str, Any],
             disc_optimizer_init: Callable,
-            disc_optimizer_args: Dict[str, Any]) -> None:
+            disc_optimizer_args: Dict[str, Any],
+            patience_metrics: Dict[str, float]) -> None:
         super(ESRGAN, self).__init__(
             device,
             Generator(in_channels, out_channels, res_scale),
@@ -203,7 +204,8 @@ class ESRGAN(BaseSRGAN):
             torch.jit.load(
                 "./models/esrgan_feature_extractor_jit.pt", map_location=device),
             gen_optimizer_init, gen_optimizer_args,
-            disc_optimizer_init, disc_optimizer_args)
+            disc_optimizer_init, disc_optimizer_args,
+            patience_metrics)
 
     def train_generator_start(
             self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -238,7 +240,7 @@ class ESRGAN(BaseSRGAN):
             "pred_reals": pred_reals,
             "pred_fakes": pred_fakes
         }
-    
+
     @torch.no_grad()
     def validation_start(
             self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -250,7 +252,6 @@ class ESRGAN(BaseSRGAN):
             **inputs,
             "gen_hr_imgs": gen_hr_imgs
         }
-
 
     def train_generator_step(
             self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -267,6 +268,8 @@ class ESRGAN(BaseSRGAN):
         adversarial_loss = adversarial_loss_fn(
             pred_fakes - pred_reals.mean(dim=0, keepdim=True), reals)
         loss = (pixel_loss + content_loss + adversarial_loss) / 3.
+        if loss.item() > 1000.0:
+            loss = 1.e-2 * pixel_loss + content_loss + 5.e-2 * adversarial_loss
         return {
             "loss": loss,
             "pixel_loss": pixel_loss,
@@ -291,15 +294,35 @@ class ESRGAN(BaseSRGAN):
             "adversarial_real_loss": adversarial_real_loss,
             "adversarial_fake_loss": adversarial_fake_loss
         }
-    
+
     @torch.no_grad()
     def validation_step(
             self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         hr_imgs = inputs["hr_imgs"]
         gen_hr_imgs = inputs["gen_hr_imgs"]
 
+        psnr = torchmetrics.functional.peak_signal_noise_ratio(
+            gen_hr_imgs, hr_imgs)
         ssim = torchmetrics.functional.structural_similarity_index_measure(
             gen_hr_imgs, hr_imgs)
         return {
+            "psnr": psnr,
             "ssim": ssim
         }
+    
+    def patience_step(self, metrics: Dict[str, float]) -> int:
+        score = 0
+
+        if metrics["psnr"] < self.last_patience_metrics["psnr"]:
+            score += 1
+            self.last_patience_metrics["psnr"] = metrics["psnr"]
+        elif metrics["psnr"] > self.last_patience_metrics["psnr"]:
+            score -= 1
+        
+        if metrics["ssim"] > self.last_patience_metrics["ssim"]:
+            score += 1
+            self.last_patience_metrics["ssim"] = metrics["ssim"]
+        if metrics["ssim"] < self.last_patience_metrics["ssim"]:
+            score -= 1
+        
+        return score
