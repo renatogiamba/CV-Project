@@ -1,3 +1,4 @@
+import PIL
 import torch
 import torch.cuda
 import torch.jit
@@ -33,25 +34,22 @@ if __name__ == "__main__":
     hr_transforms = torch.jit.script(hr_transforms.eval())
     hr_transforms = torch.jit.freeze(hr_transforms)
 
-    div2k_train_ds = sr_gans.DIV2KDataset(
-        True, DEVICE, lr_transforms, hr_transforms)
-    div2k_train_dl = torch.utils.data.DataLoader(
-        div2k_train_ds, batch_size=BATCH_SIZE, shuffle=True,
-        collate_fn=sr_gans.DataCollator())
-    div2k_val_ds = sr_gans.DIV2KDataset(
-        False, DEVICE, lr_transforms, hr_transforms)
-    div2k_val_dl = torch.utils.data.DataLoader(
-        div2k_val_ds, batch_size=BATCH_SIZE, shuffle=False,
-        collate_fn=sr_gans.DataCollator())
-
+    set14_ds = sr_gans.Set14Dataset(DEVICE, lr_transforms, hr_transforms)
+    batch = set14_ds[4]
+    lr_img = batch["lr_img"]
+    hr_img = batch["hr_img"]
+    
     model = sr_gans.ESRGAN(
         DEVICE, 3, GEN_CHANNELS, IMG_SIZE, RES_SCALE,
         torch.optim.Adam, {"lr": 0.001, "betas": (0.9, 0.999)},
         torch.optim.Adam, {"lr": 0.001, "betas": (0.9, 0.999)},
         {"psnr": -1000., "ssim": -1000.}).to(device=DEVICE)
-    #model.warmup(
-    #    div2k_train_dl, NUM_WARMUP_EPOCHS, "pixel_loss",
-    #    checkpoint_filename=None)
-    model.fit(
-        div2k_train_dl, div2k_val_dl, NUM_EPOCHS, 5, lr=0.0001,
-        checkpoint_filename="esrgan.ckpt")
+    model.load_checkpoint("esrgan.ckpt")
+    gen_hr_img = model.predict(lr_img)
+    
+    lr_img = torchvision.transforms.functional.to_pil_image(lr_img)
+    lr_img.save("lr_img.jpg")
+    hr_img = torchvision.transforms.functional.to_pil_image(hr_img)
+    hr_img.save("hr_img.jpg")
+    gen_hr_img = torchvision.transforms.functional.to_pil_image(gen_hr_img)
+    gen_hr_img.save("gen_hr_img.jpg")

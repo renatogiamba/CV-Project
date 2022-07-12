@@ -4,7 +4,7 @@ import torch.cuda
 import torch.nn
 import torch.nn.functional
 import os
-#import config
+import config
 import numpy as np
 import PIL
 from PIL import Image
@@ -12,7 +12,7 @@ from torchvision.utils import save_image
 from torchvision.models import vgg19
 
 
-'''def denormalize(tensors):
+def denormalize(tensors):
     """ Denormalizes image tensors using mean and std """
     for c in range(3):
         tensors[:, c].mul_(config.std[c]).add_(config.mean[c])
@@ -65,27 +65,4 @@ class VGGLoss(torch.nn.Module):
             *list(vgg19_model.features.children())[:18])
 
     def forward(self, img):
-        return self.vgg_loss(img)'''
-
-
-def set_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-
-
-def pixel_loss_fn(
-        gen_imgs: torch.Tensor, imgs: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.l1_loss(gen_imgs, imgs)
-
-
-def content_loss_fn(
-        gen_features: torch.Tensor, features: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.l1_loss(gen_features, features)
-
-
-def adversarial_loss_fn(
-        gen_validities: torch.Tensor, validities: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.binary_cross_entropy_with_logits(
-        gen_validities, validities)
+        return self.vgg_loss(img)

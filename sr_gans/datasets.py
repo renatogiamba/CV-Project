@@ -67,6 +67,7 @@ class DIV2KDataset(torch.utils.data.Dataset):
         ========
         (int): The number of image couples in the dataset.
         """
+
         return len(self.lr_filenames)
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
@@ -160,6 +161,7 @@ class Set14Dataset(torch.utils.data.Dataset):
         ========
         (int): The number of image couples in the dataset.
         """
+        
         return len(self.lr_filenames)
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:

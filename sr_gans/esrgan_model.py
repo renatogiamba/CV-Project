@@ -14,7 +14,7 @@ from typing import *
 from .base_model import (
     BaseSRGAN
 )
-from .utils import (
+from .esrgan_utils import (
     adversarial_loss_fn, content_loss_fn, pixel_loss_fn
 )
 
@@ -302,9 +302,9 @@ class ESRGAN(BaseSRGAN):
         gen_hr_imgs = inputs["gen_hr_imgs"]
 
         psnr = torchmetrics.functional.peak_signal_noise_ratio(
-            gen_hr_imgs, hr_imgs)
+            torch.sigmoid(gen_hr_imgs), hr_imgs)
         ssim = torchmetrics.functional.structural_similarity_index_measure(
-            gen_hr_imgs, hr_imgs)
+            torch.sigmoid(gen_hr_imgs), hr_imgs)
         return {
             "psnr": psnr,
             "ssim": ssim
@@ -313,10 +313,10 @@ class ESRGAN(BaseSRGAN):
     def patience_step(self, metrics: Dict[str, float]) -> int:
         score = 0
 
-        if metrics["psnr"] < self.last_patience_metrics["psnr"]:
+        if metrics["psnr"] > self.last_patience_metrics["psnr"]:
             score += 1
             self.last_patience_metrics["psnr"] = metrics["psnr"]
-        elif metrics["psnr"] > self.last_patience_metrics["psnr"]:
+        elif metrics["psnr"] < self.last_patience_metrics["psnr"]:
             score -= 1
         
         if metrics["ssim"] > self.last_patience_metrics["ssim"]:
@@ -326,3 +326,118 @@ class ESRGAN(BaseSRGAN):
             score -= 1
         
         return score
+    
+    def warmup(
+            self,
+            train_dl: torch.utils.data.DataLoader,
+            num_epochs: int, loss_type: str, lr: Optional[float] = None,
+            checkpoint_filename: Optional[str] = None) -> None:
+        """
+        Perform the training procedure based only on a single loss from the generator.
+
+        Parameters:
+        ===========
+        train_dl (torch.utils.data.DataLoader): The Pytorch data loader for the 
+            training dataset.
+        
+        num_epochs (int): Maximum number of iterations on the training dataset.
+
+        loss_type (str): Name of the generator loss to train on.
+        
+        lr (Optional[float]): A new learning rate for the optimizers. Set to 'None' 
+            if you don't want to change it.
+
+        checkpoint_filename (Optional[str]): The path to a checkpoint file to load. Set 
+            to 'None' if you want to mantain the current state.
+        """
+
+        # if requested, load a checkpoint
+        if checkpoint_filename is not None:
+            print("[Loading the best checkpoint...]")
+            self.load_checkpoint(checkpoint_filename)
+            if lr is not None:
+                for param_group in self.gen_optimizer.param_groups:
+                    param_group["lr"] = lr
+                for param_group in self.disc_optimizer.param_groups:
+                    param_group["lr"] = lr
+            print("[Best checkpoint loaded.]\n")
+
+        # prepare auxiliary variables
+        num_train_batches = len(train_dl)
+
+        for epoch in range(num_epochs):
+
+            # TRAINING PROCEDURE
+
+            # set models in training mode
+            self.gen_model.train()
+            self.disc_model.train()
+
+            # iterate over the training dataset
+            for i, batch in enumerate(train_dl):
+                lr_imgs = batch["lr_imgs"]
+                hr_imgs = batch["hr_imgs"]
+                reals = torch.ones(
+                    (lr_imgs.shape[0], 1), dtype=torch.float, device=self.device)
+                fakes = torch.zeros(
+                    (lr_imgs.shape[0], 1), dtype=torch.float, device=self.device)
+
+                # reset the optimizer of the generator model
+                self.gen_optimizer.zero_grad()
+
+                # compute the needed inputs for the generator model
+                gen_inputs = self.train_generator_start({
+                    "lr_imgs": lr_imgs,
+                    "hr_imgs": hr_imgs,
+                    "reals": reals,
+                    "fakes": fakes
+                })
+
+                # compute the losses for the generator model
+                gen_losses = self.train_generator_step(gen_inputs)
+
+                # perform the backpropagation pass of the generator model
+                gen_loss = gen_losses[loss_type]
+                gen_loss.backward()
+
+                # update the weigths of the generator model
+                self.gen_optimizer.step()
+
+                # reset the optimizer of the discriminator model
+                self.disc_optimizer.zero_grad()
+
+                # compute the needed inputs for the discriminator model
+                disc_inputs = self.train_discriminator_start({
+                    "lr_imgs": lr_imgs,
+                    "hr_imgs": hr_imgs,
+                    "reals": reals,
+                    "fakes": fakes,
+                    "gen_hr_imgs": gen_inputs["gen_hr_imgs"].detach()
+                })
+
+                # compute the losses for the discriminator model
+                disc_losses = self.train_discriminator_step(disc_inputs)
+
+                # perform the backpropagation pass of the discriminator model
+                disc_loss = disc_losses["loss"]
+                disc_loss.backward()
+
+                # update the weigths of the discriminator model
+                self.disc_optimizer.step()
+
+                # log results
+                print(
+                    f"Train Warmup on {loss_type} [epoch {epoch + 1:3d}/{num_epochs:3d}] "
+                    f"[batch {i + 1:3d}/{num_train_batches:3d}]")
+                print(
+                    f"Generator [{loss_type} {gen_losses[loss_type].item():.2f}]")
+                print("Discriminator ", end="")
+                for loss_name, loss in disc_losses.items():
+                    print(f"[{loss_name} {loss.item():.2f}] ", end="")
+                print("\n")
+
+            print("[Saving the checkpoint...]")
+            self.save_checkpoint(
+                checkpoint_filename if checkpoint_filename is not None
+                else "esrgan.ckpt")
+            print("[Checkpoint saved.]\n")

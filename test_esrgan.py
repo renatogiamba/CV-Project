@@ -33,15 +33,9 @@ if __name__ == "__main__":
     hr_transforms = torch.jit.script(hr_transforms.eval())
     hr_transforms = torch.jit.freeze(hr_transforms)
 
-    div2k_train_ds = sr_gans.DIV2KDataset(
-        True, DEVICE, lr_transforms, hr_transforms)
-    div2k_train_dl = torch.utils.data.DataLoader(
-        div2k_train_ds, batch_size=BATCH_SIZE, shuffle=True,
-        collate_fn=sr_gans.DataCollator())
-    div2k_val_ds = sr_gans.DIV2KDataset(
-        False, DEVICE, lr_transforms, hr_transforms)
-    div2k_val_dl = torch.utils.data.DataLoader(
-        div2k_val_ds, batch_size=BATCH_SIZE, shuffle=False,
+    set14_ds = sr_gans.Set14Dataset(DEVICE, lr_transforms, hr_transforms)
+    set14_dl = torch.utils.data.DataLoader(
+        set14_ds, batch_size=BATCH_SIZE, shuffle=False,
         collate_fn=sr_gans.DataCollator())
 
     model = sr_gans.ESRGAN(
@@ -49,9 +43,4 @@ if __name__ == "__main__":
         torch.optim.Adam, {"lr": 0.001, "betas": (0.9, 0.999)},
         torch.optim.Adam, {"lr": 0.001, "betas": (0.9, 0.999)},
         {"psnr": -1000., "ssim": -1000.}).to(device=DEVICE)
-    #model.warmup(
-    #    div2k_train_dl, NUM_WARMUP_EPOCHS, "pixel_loss",
-    #    checkpoint_filename=None)
-    model.fit(
-        div2k_train_dl, div2k_val_dl, NUM_EPOCHS, 5, lr=0.0001,
-        checkpoint_filename="esrgan.ckpt")
+    model.test(set14_dl, checkpoint_filename="esrgan.ckpt")
