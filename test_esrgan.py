@@ -1,12 +1,9 @@
+import argparse
 import torch
 import torch.cuda
 import torch.jit
-import torch.nn
-import torch.optim
 import torch.utils
 import torch.utils.data
-import torchvision
-import torchvision.transforms
 
 import sr_gans
 
@@ -14,33 +11,35 @@ import sr_gans
 if __name__ == "__main__":
     BATCH_SIZE = 16
     IMG_SIZE = 128
-    GEN_CHANNELS = 64
-    RES_SCALE = 0.2
-    NUM_WARMUP_EPOCHS = 5
-    NUM_EPOCHS = 20
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    cli = argparse.ArgumentParser()
+    cli.add_argument(
+        "--ckpt_filename", action="store",
+        default="./models/ESRGAN_GAN-epoch:300-psnr:19.11-ssim:0.55.ckpt",
+        help="the name of the file with a checkpoint for the pretraining "
+            "or the training phase")
+    cli.add_argument(
+        "--is_PSNR_ckpt", action="store_true", default=False,
+        help="whether the checkpoint is for pretraining or not")
+
+    args = cli.parse_args()
 
     sr_gans.set_seed(0xDEADBEEF)
 
-    lr_transforms = torch.nn.Sequential(
-        torchvision.transforms.CenterCrop(IMG_SIZE // 4)
-    ).to(device=DEVICE)
-    lr_transforms = torch.jit.script(lr_transforms.eval())
-    lr_transforms = torch.jit.freeze(lr_transforms)
-    hr_transforms = torch.nn.Sequential(
-        torchvision.transforms.CenterCrop(IMG_SIZE)
-    ).to(device=DEVICE)
-    hr_transforms = torch.jit.script(hr_transforms.eval())
-    hr_transforms = torch.jit.freeze(hr_transforms)
+    print(f"[Device in use: {DEVICE}.]\n")
 
-    set14_ds = sr_gans.Set14Dataset(DEVICE, lr_transforms, hr_transforms)
+    print("[Loading the test dataset...]\n")
+    set14_ds = sr_gans.Set14Dataset(DEVICE)
     set14_dl = torch.utils.data.DataLoader(
         set14_ds, batch_size=BATCH_SIZE, shuffle=False,
         collate_fn=sr_gans.DataCollator())
+    print("[Test dataset loaded.]\n")
 
-    model = sr_gans.ESRGAN(
-        DEVICE, 3, GEN_CHANNELS, IMG_SIZE, RES_SCALE,
-        torch.optim.Adam, {"lr": 0.001, "betas": (0.9, 0.999)},
-        torch.optim.Adam, {"lr": 0.001, "betas": (0.9, 0.999)},
-        {"psnr": -1000., "ssim": -1000.}).to(device=DEVICE)
-    model.test(set14_dl, checkpoint_filename="esrgan.ckpt")
+    print("[Building the model...]\n")
+    model = sr_gans.ESRGAN(DEVICE, 3, 3, 23).to(device=DEVICE)
+    print("[Model built.]\n")
+
+    model.test(
+        set14_dl,
+        not args.is_PSNR_ckpt, args.checkpoint_filename)

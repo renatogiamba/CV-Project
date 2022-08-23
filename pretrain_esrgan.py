@@ -15,25 +15,21 @@ if __name__ == "__main__":
 
     cli = argparse.ArgumentParser()
     cli.add_argument(
-        "--PNSR_ckpt_filename", action="store",
-        default="./models/ESRGAN_PSNR-epoch:16-psnr:21.97-ssim:0.65.ckpt",
-        help="the name of the file with a checkpoint for the pretraining phase")
-    cli.add_argument(
-        "--num_epochs", action="store", type=int, default=50,
-        help="the number of epochs to train")
+        "--num_epochs", action="store", type=int, default=4,
+        help="the number of epochs to pretrain")
     cli.add_argument(
         "--start_epoch", action="store", type=int, default=0,
-        help="the epoch to restart the training in")
+        help="the epoch to restart the pretraining in")
     cli.add_argument(
         "--psnr", action="store", type=float, default=0.,
-        help="the current psnr when the model stopped training")
+        help="the current psnr when the model stopped pretraining")
     cli.add_argument(
         "--ssim", action="store", type=float, default=0.,
-        help="the current ssim when the model stopped training")
+        help="the current ssim when the model stopped pretraining")
     cli.add_argument(
-        "--lr", action="store", type=float, default=1.e-4,
+        "--lr", action="store", type=float, default=2.e-4,
         help="an eventually new learning rate")
-    
+
     args = cli.parse_args()
 
     print(f"[Device in use: {DEVICE}.]\n")
@@ -55,9 +51,8 @@ if __name__ == "__main__":
     print("[Building the model...]\n")
     model = sr_gans.ESRGAN(DEVICE, 3, 3, 23).to(device=DEVICE)
     print("[Model built.]\n")
-    
-    model.fit(
+
+    model.warmup(
         div2k_train_dl, div2k_val_dl,
-        args.PNSR_ckpt_filename,
         args.num_epochs, args.start_epoch,
         args.psnr, args.ssim, args.lr)
