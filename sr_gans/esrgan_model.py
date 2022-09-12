@@ -395,7 +395,7 @@ class Discriminator(torch.nn.Module):
         self.classifier_body = torch.nn.Sequential(collections.OrderedDict([
             ("lin1", torch.nn.Linear(512 * 4 * 4, 100)),
             ("act", torch.nn.LeakyReLU(negative_slope=0.2)),
-            ("lin2", torch.nn.Linear(100, 1))
+            ("lin_class", torch.nn.Linear(100, 1))
         ]))
 
     def forward(self, imgs: torch.Tensor) -> torch.Tensor:
@@ -586,8 +586,8 @@ class ESRGAN(torch.nn.Module):
 
         # save the checkpoint
         torch.save(
-            ckpt, f"./models/ESRGAN_PSNR-epoch:{epoch}-"
-            f"psnr:{psnr:.2f}-ssim:{ssim:.2f}.ckpt")
+            ckpt, f"./models/ESRGAN_PSNR-epoch_{epoch}-"
+            f"psnr_{psnr:.2f}-ssim_{ssim:.2f}.ckpt")
 
     def save_GAN_checkpoint(
             self, epoch: int, psnr: float, ssim: float) -> None:
@@ -611,8 +611,8 @@ class ESRGAN(torch.nn.Module):
 
         # save the checkpoint
         torch.save(
-            ckpt, f"./models/ESRGAN_GAN-epoch:{epoch}-"
-            f"psnr:{psnr:.2f}-ssim:{ssim:.2f}.ckpt")
+            ckpt, f"./models/ESRGAN_GAN-epoch_{epoch}-"
+            f"psnr_{psnr:.2f}-ssim_{ssim:.2f}.ckpt")
 
     def load_PSNR_checkpoint(
             self, epoch: int, psnr: float, ssim: float) -> None:
@@ -628,8 +628,8 @@ class ESRGAN(torch.nn.Module):
 
         # prepare the checkpoint
         ckpt = torch.load(
-            f"./models/ESRGAN_PSNR-epoch:{epoch}-"
-            f"psnr:{psnr:.2f}-ssim:{ssim:.2f}.ckpt", map_location=self.device)
+            f"./models/ESRGAN_PSNR-epoch_{epoch}-"
+            f"psnr_{psnr:.2f}-ssim_{ssim:.2f}.ckpt", map_location=self.device)
         
         # load the checkpoint
         self.gen_model.load_state_dict(ckpt["gen_model"])
@@ -681,8 +681,8 @@ class ESRGAN(torch.nn.Module):
 
         # prepare the checkpoint
         ckpt = torch.load(
-            f"./models/ESRGAN_GAN-epoch:{epoch}-"
-            f"psnr:{psnr:.2f}-ssim:{ssim:.2f}.ckpt", map_location=self.device)
+            f"./models/ESRGAN_GAN-epoch_{epoch}-"
+            f"psnr_{psnr:.2f}-ssim_{ssim:.2f}.ckpt", map_location=self.device)
         
         # load the checkpoint
         self.gen_model.load_state_dict(ckpt["gen_model"])

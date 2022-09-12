@@ -1,7 +1,7 @@
 import collections
 import torch
 import torch.jit
-import torch.nn as nn
+import torch.nn
 import torch.nn.init
 import torch.optim
 import torch.utils
@@ -11,7 +11,6 @@ import torchmetrics.functional
 import torchvision
 import torchvision.models
 from typing import *
-from torchvision.models import vgg19
 import numpy as np
 
 from .srgan_utils import (
@@ -162,17 +161,22 @@ class Discriminator(torch.nn.Module):
         return out
 
 
-class FeatureExtractor(nn.Module):
+class FeatureExtractor(torch.nn.Module):
     """
     Pytorch subclass for hadling the the SRGAN feature extractor.
     """
+
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        vgg19_model = vgg19(pretrained=True)
-        self.vgg_loss = nn.Sequential(*list(vgg19_model.features.children())[:18])
+        vgg19_model = torchvision.models.vgg19()
+        vgg19_model.load_state_dict(torch.load("./models/vgg19-dcbb9e9d.pth"))
+
+        self.vgg_loss = torch.nn.Sequential(
+            *list(vgg19_model.features.children())[:18])
 
     def forward(self, img):
         return self.vgg_loss(img)
+        
 
 class SRGAN(torch.nn.Module):
     """
@@ -184,6 +188,7 @@ class SRGAN(torch.nn.Module):
             num_blocks: int) -> None:
         """
         Constructor for the class.
+
         Parameters:
         ===========
         device (torch.device): The Pytorch device to perform the computations on.
@@ -213,9 +218,11 @@ class SRGAN(torch.nn.Module):
         """
         Reset the right parameters in an optimizer that has been swapped between
         CPU and GPU or that has been loaded from a checkpoint.
+
         Parameters:
         ===========
         optimizer (torch.optim.Optimizer): The optimizer to reset.
+
         lr (float): A new learning rate for the optimizer.
         """
 
@@ -231,9 +238,11 @@ class SRGAN(torch.nn.Module):
             self, model: torch.nn.Module) -> torch.optim.Optimizer:
         """
         Build an optimizer for the training phase.
+
         Parameters:
         ===========
         model (torch.nn.Module): The model whose weights will be optimized.
+
         Returns:
         ========
         (torch.optim.Optimizer): The desired optimizer.
@@ -246,9 +255,11 @@ class SRGAN(torch.nn.Module):
     def forward(self, lr_imgs: torch.Tensor) -> torch.Tensor:
         """
         Perform the forward pass of the network.
+
         Parameters:
         ===========
         lr_imgs (torch.Tensor): The input batch of LR images.
+
         Returns:
         ========
         (torch.Tensor): The output batch of HR images.
@@ -261,6 +272,7 @@ class SRGAN(torch.nn.Module):
             self, epoch: int, psnr: float, ssim: float) -> None:
         """
         Save a checkpoint of the network for the training phase.
+
         Parameters:
         ===========
         epoch (int): The epoch the model stopped the training in.
@@ -278,13 +290,14 @@ class SRGAN(torch.nn.Module):
 
         # save the checkpoint
         torch.save(
-            ckpt, f"./drive/MyDrive/CV_Project/models/SRGAN_GAN-epoch:{epoch}-"
-            f"psnr:{psnr:.2f}-ssim:{ssim:.2f}.ckpt")
+            ckpt, f"./models/SRGAN_GAN-epoch_{epoch}-"
+            f"psnr_{psnr:.2f}-ssim_{ssim:.2f}.ckpt")
    
     def load_GAN_checkpoint(
             self, epoch: int, psnr: float, ssim: float) -> None:
         """
         Load a checkpoint of the network for the training phase.
+
         Parameters:
         ===========
         epoch (int): The epoch the model will resume the training at.
@@ -294,8 +307,8 @@ class SRGAN(torch.nn.Module):
 
         # prepare the checkpoint
         ckpt = torch.load(
-            f"./drive/MyDrive/CV_Project/models/SRGAN_GAN-epoch:{epoch}-"
-            f"psnr:{psnr:.2f}-ssim:{ssim:.2f}.ckpt", map_location=self.device)
+            f"./models/SRGAN_GAN-epoch_{epoch}-"
+            f"psnr_{psnr:.2f}-ssim_{ssim:.2f}.ckpt", map_location=self.device)
         
         # load the checkpoint
         self.gen_model.load_state_dict(ckpt["gen_model"])
@@ -307,6 +320,7 @@ class SRGAN(torch.nn.Module):
         """
         Load a checkpoint of the network for the training phase and convert it
         for the testing phase.
+
         Parameters:
         ===========
         checkpoint_filename (str): Name of the file where the checkpoint is saved.
@@ -327,6 +341,7 @@ class SRGAN(torch.nn.Module):
             psnr: float, ssim: float, lr: float) -> None:
         """
         Perform the training and the validation phases.
+
         Parameters:
         ===========
         train_dl (torch.utils.data.DataLoader): Pytorch data loader the the 
@@ -452,7 +467,6 @@ class SRGAN(torch.nn.Module):
 
                 loss_disc = adversarial_real_loss + adversarial_fake_loss
 
-
                 # update the weights of the discriminator
                 self.disc_optimizer.step()
 
@@ -532,6 +546,7 @@ class SRGAN(torch.nn.Module):
             is_GAN_ckpt: bool, checkpoint_filename: str) -> None:
         """
         Perform the testing phase.
+
         Parameters:
         ===========
         test_dl (torch.utils.data.DataLoader): Pytorch data loader the the 

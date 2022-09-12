@@ -49,7 +49,7 @@ if __name__ == "__main__":
     print("[Validation dataset loaded.]\n")
 
     print("[Building the model...]\n")
-    model = sr_gans.SRGAN(DEVICE, in_channels=3, out_channels=3, num_blocks=16).to(device=DEVICE)
+    model = sr_gans.SRGAN(DEVICE, 3, 3, 16).to(device=DEVICE)
     print("[Model built.]\n")
     
     model.fit(

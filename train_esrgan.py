@@ -15,8 +15,8 @@ if __name__ == "__main__":
 
     cli = argparse.ArgumentParser()
     cli.add_argument(
-        "--PNSR_ckpt_filename", action="store",
-        default="./models/ESRGAN_PSNR-epoch:16-psnr:21.97-ssim:0.65.ckpt",
+        "--PSNR_ckpt_filename", action="store",
+        default="./models/ESRGAN_PSNR-epoch_16-psnr_21.97-ssim_0.65.ckpt",
         help="the name of the file with a checkpoint for the pretraining phase")
     cli.add_argument(
         "--num_epochs", action="store", type=int, default=50,
@@ -58,6 +58,6 @@ if __name__ == "__main__":
     
     model.fit(
         div2k_train_dl, div2k_val_dl,
-        args.PNSR_ckpt_filename,
+        args.PSNR_ckpt_filename,
         args.num_epochs, args.start_epoch,
         args.psnr, args.ssim, args.lr)

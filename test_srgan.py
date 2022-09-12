@@ -16,7 +16,7 @@ if __name__ == "__main__":
     cli = argparse.ArgumentParser()
     cli.add_argument(
         "--ckpt_filename", action="store",
-        default="/content/drive/MyDrive/CV_Project/models/SRGAN_GAN-epoch:371-psnr:20.14-ssim:0.51.ckpt",
+        default="./models/SRGAN_GAN-epoch_371-psnr_20.14-ssim_0.51.ckpt",
         help="the name of the file with a checkpoint for the pretraining "
             "or the training phase")
     cli.add_argument(

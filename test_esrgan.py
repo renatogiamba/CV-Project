@@ -16,7 +16,7 @@ if __name__ == "__main__":
     cli = argparse.ArgumentParser()
     cli.add_argument(
         "--ckpt_filename", action="store",
-        default="./models/ESRGAN_GAN-epoch:300-psnr:19.11-ssim:0.55.ckpt",
+        default="./models/ESRGAN_GAN-epoch_350-psnr_19.35-ssim_0.58.ckpt",
         help="the name of the file with a checkpoint for the pretraining "
             "or the training phase")
     cli.add_argument(
